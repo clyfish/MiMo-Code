@@ -541,21 +541,15 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         const composeCfg = (yield* config.get()).compose
         const docsDir = ConfigCompose.resolveDocsDir(ctx.worktree, composeCfg)
-        const composeDocsBlock = [
-          "<compose_docs_dir>",
-          `Save compose skill outputs: specs in \`${path.join(docsDir, "specs")}\`, plans in \`${path.join(docsDir, "plans")}\`, reports in \`${path.join(docsDir, "reports")}\`.`,
-          "</compose_docs_dir>",
-        ].join("\n")
+        const text = PROMPT_COMPOSE
+          .replace("{{compose_skills}}", composeModeBlock)
+          .replace("{{compose_docs_dir}}", `Save compose skill outputs: specs in \`${path.join(docsDir, "specs")}\`, plans in \`${path.join(docsDir, "plans")}\`, reports in \`${path.join(docsDir, "reports")}\`.`)
         composeModeMsg.parts.unshift({
           id: PartID.ascending(),
           messageID: composeModeMsg.info.id,
           sessionID: composeModeMsg.info.sessionID,
           type: "text",
-          text:
-            PROMPT_COMPOSE +
-            (composeModeBlock ? "\n\n" + composeModeBlock : "") +
-            "\n\n" +
-            composeDocsBlock,
+          text,
           synthetic: true,
         })
       }

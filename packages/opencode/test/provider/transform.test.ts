@@ -1867,7 +1867,7 @@ describe("ProviderTransform.message - assistant prefill (Bedrock rejects trailin
     expect(result[result.length - 1].role).toBe("tool")
   })
 
-  test("anthropic-native: keeps the trailing assistant prefill intact", () => {
+  test("anthropic-native: keeps the trailing assistant prefill intact (bare claude id, genuine Anthropic accepts prefill)", () => {
     const result = ProviderTransform.message(prefillConversation(), anthropicModel, {})
     expect(result).toHaveLength(4)
     expect(result[result.length - 1].role).toBe("assistant")
@@ -1882,6 +1882,42 @@ describe("ProviderTransform.message - assistant prefill (Bedrock rejects trailin
     })
     const result = ProviderTransform.message(prefillConversation(), model, {})
     expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("bedrock-backed model reached via a non-bedrock anthropic-messages gateway (mimorouter): still drops the trailing assistant prefill (T35 follow-up recurrence)", () => {
+    // Front door is an Anthropic /v1/messages gateway, so npm is "@ai-sdk/anthropic"
+    // and providerID carries no "bedrock" — but the Bedrock model-id namespace
+    // ("anthropic.claude-*") passes through and flags the BedrockRuntime backend.
+    const gatewayModel = withProvider("mimo", {
+      id: "anthropic.claude-sonnet-4",
+      url: "http://mimorouter.llmcore.ai.srv/v1/messages",
+      npm: "@ai-sdk/anthropic",
+    })
+    const result = ProviderTransform.message(prefillConversation(), gatewayModel, {})
+    expect(result).toHaveLength(3)
+    expect(result[result.length - 1].role).toBe("user")
+    expect(result[result.length - 1].content).toBe("Now continue.")
+  })
+
+  test("bedrock-backed gateway with cross-region model id (us.anthropic.*, xiaomi providerID, anthropic npm): drops multiple trailing assistant messages", () => {
+    const gatewayModel = withProvider("xiaomi", {
+      id: "us.anthropic.claude-opus-4",
+      url: "http://mimorouter.llmcore.ai.srv/v1/messages",
+      npm: "@ai-sdk/anthropic",
+    })
+    const msgs = [
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: [{ type: "text", text: "mid-turn assistant" }] },
+      { role: "user", content: "Go" },
+      { role: "assistant", content: [{ type: "text", text: "first prefill" }] },
+      { role: "assistant", content: [{ type: "text", text: "second prefill" }] },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, gatewayModel, {})
+    expect(result[result.length - 1].role).toBe("user")
+    expect(result[result.length - 1].content).toBe("Go")
+    expect(result.some((m) => Array.isArray(m.content) && (m.content[0] as any)?.text === "mid-turn assistant")).toBe(
+      true,
+    )
   })
 })
 

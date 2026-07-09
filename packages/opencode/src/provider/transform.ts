@@ -242,20 +242,43 @@ function supportsCacheMarkers(model: Provider.Model): boolean {
 }
 
 // Whether the provider/model accepts an "assistant prefill" — a trailing
-// assistant message that the model continues from. Anthropic-native (and the
-// Anthropic-shaped SDKs) accept it; the Bedrock Converse API rejects it with a
-// non-retryable 400: "This model does not support assistant message prefill.
-// The conversation must end with a user message."
+// assistant message that the model continues from. Anthropic-native genuinely
+// accepts it; the Bedrock Converse API rejects it with a non-retryable 400:
+// "This model does not support assistant message prefill. The conversation must
+// end with a user message."
 //
-// Detection mirrors supportsCacheMarkers: match by SDK npm + providerID rather
-// than fragile model-id name matching, so a Claude routed through Bedrock is
-// correctly treated as prefill-rejecting even though its id contains "claude".
+// The trap (T35 follow-up recurrence): a Bedrock-backed model can be reached
+// through an Anthropic-messages gateway (e.g. mimorouter.llmcore.ai.srv
+// /v1/messages), where the model carries npm "@ai-sdk/anthropic" and a
+// providerID with no "bedrock" in it (xiaomi, mimo, a router alias). Detecting
+// Bedrock by npm/providerID name alone misses that case, so the prefill is sent
+// and 400s (error body: "Service: BedrockRuntime").
+//
+// The reliable runtime signal that survives the gateway is the model id itself:
+// Bedrock namespaces every hosted model as "<vendor>.<model>" (optionally with a
+// region/cross-region prefix, e.g. "anthropic.claude-3-5-sonnet",
+// "us.anthropic.claude-opus-4"). Anthropic-native / Vertex ids never carry that
+// dotted-vendor prefix ("claude-3-5-sonnet-20241022", "claude-sonnet-4@..."), so
+// matching it flags a Bedrock backend regardless of the front door without
+// touching genuine Anthropic.
 function supportsAssistantPrefill(model: Provider.Model): boolean {
   // Bedrock Converse API rejects a trailing assistant message across all model
   // families it hosts.
   if (model.api.npm === "@ai-sdk/amazon-bedrock") return false
   if (model.providerID.includes("bedrock")) return false
+  // Bedrock-backed model reached via a non-bedrock gateway: detect by the
+  // Bedrock model-id namespace (dotted-vendor prefix), which the gateway passes
+  // through even when npm/providerID say "anthropic".
+  if (isBedrockModelId(model.api.id) || isBedrockModelId(model.id)) return false
   return true
+}
+
+// Bedrock model ids namespace the vendor before the model with a dot, optionally
+// behind a cross-region routing prefix: "anthropic.claude-3-5-sonnet",
+// "us.anthropic.claude-opus-4-6", "eu.meta.llama3-70b". Anthropic-native ids use
+// a bare "claude-*" / date / "@version" form with no such vendor.model segment.
+function isBedrockModelId(id: string): boolean {
+  return /(^|[./])(anthropic|meta|amazon|cohere|mistral|ai21|deepseek)\.[a-z0-9]/i.test(id)
 }
 
 // Bedrock (and any other prefill-rejecting provider) 400s when the message list

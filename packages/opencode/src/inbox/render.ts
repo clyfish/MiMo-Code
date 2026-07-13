@@ -40,6 +40,9 @@ export function renderActorNotification(event: {
 }
 
 export type ParsedActorNotification = {
+  // "stalled" is reserved for a future watchdog-emitted notification;
+  // renderActorNotification never produces it today (only completed/failed/
+  // cancelled). The parse + card styling exist ahead of that producer.
   status: "completed" | "failed" | "cancelled" | "stalled"
   description: string
   summary?: string
@@ -58,7 +61,13 @@ export function parseActorNotification(text: string): ParsedActorNotification | 
   const status: ParsedActorNotification["status"] =
     verb === "completed" ? "completed" : verb === "failed" ? "failed" : verb === "stalled" ? "stalled" : "cancelled"
   // Prefer the most human-relevant one-liner: Summary > Result > Error.
-  const line = (label: string) => text.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim()
-  const summary = line("Summary") ?? line("Result") ?? line("Error")
+  // renderActorNotification always emits the Summary line before the Result
+  // line, so restrict the Summary match to the region before the first
+  // "Result:" line — otherwise a `Summary:`-prefixed line inside the Result
+  // body would be mistaken for the notification's own summary.
+  const resultIdx = text.search(/^Result:/m)
+  const beforeResult = resultIdx === -1 ? text : text.slice(0, resultIdx)
+  const line = (label: string, scope: string) => scope.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim()
+  const summary = line("Summary", beforeResult) ?? line("Result", text) ?? line("Error", text)
   return summary ? { status, description, summary } : { status, description }
 }

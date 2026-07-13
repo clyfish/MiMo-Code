@@ -33,6 +33,21 @@ describe("parseActorNotification", () => {
     })
   })
 
+  test("completed without a summary does not mistake an embedded Summary: line in the Result body", () => {
+    const text = renderActorNotification({
+      actorID: "explore-3",
+      description: "Draft report",
+      status: "completed",
+      reportedStatus: "success",
+      result: "Here is the outline:\nSummary: this is inside the result body\nmore text",
+    })
+    expect(parseActorNotification(text)).toEqual({
+      status: "completed",
+      description: "Draft report",
+      summary: "Here is the outline:",
+    })
+  })
+
   test("parses a failed notification with the Error line as summary", () => {
     const text = renderActorNotification({
       actorID: "general-9",

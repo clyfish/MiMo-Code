@@ -70,6 +70,7 @@ import { WorkflowTree } from "@tui/component/workflow-tree"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { DialogSubagent } from "./dialog-subagent.tsx"
 import { Flag } from "@/flag/flag"
+import { parseActorNotification } from "@/inbox/render"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import * as Clipboard from "../../util/clipboard"
@@ -1440,6 +1441,18 @@ function UserMessage(props: {
     })[0]
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  // Orchestrator actor-notifications arrive as a synthetic user text part whose
+  // text is the pre-rendered <actor-notification> wrapper (inbox/render.ts).
+  // Detect + parse it into a compact status card instead of showing raw XML.
+  // Gated on the orchestrator flag so non-orchestrator sessions are untouched.
+  const actorNotification = createMemo(() => {
+    if (!Flag.MIMOCODE_EXPERIMENTAL_ORCHESTRATOR) return undefined
+    return props.parts.flatMap((x) => {
+      if (x.type !== "text" || !x.synthetic) return []
+      const parsed = parseActorNotification(x.text)
+      return parsed ? [parsed] : []
+    })[0]
+  })
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
@@ -1478,7 +1491,35 @@ function UserMessage(props: {
           )
         }}
       </Show>
-      <Show when={text()}>
+      <Show when={actorNotification()}>
+        {(note) => {
+          // Map each status to an icon + theme color. Mirrors the cronFire
+          // badge styling so orchestrator notifications read as first-class
+          // structured rows rather than raw <actor-notification> XML.
+          const style = createMemo(() => {
+            const s = note().status
+            if (s === "completed") return { icon: "✓", fg: theme.success, label: "completed" }
+            if (s === "failed") return { icon: "✗", fg: theme.error, label: "failed" }
+            if (s === "stalled") return { icon: "⏳", fg: theme.warning, label: "stalled" }
+            return { icon: "⊜", fg: theme.textMuted, label: "cancelled" }
+          })
+          return (
+            <box id={props.message.id} marginTop={props.index === 0 ? 0 : 1} paddingLeft={2} flexDirection="row" gap={1}>
+              <text fg={theme.textMuted}>
+                <span style={{ bg: theme.backgroundElement, fg: style().fg, bold: true }}>
+                  {" "}
+                  {style().icon} actor {style().label}{" "}
+                </span>
+                <span style={{ fg: theme.text }}> {note().description}</span>
+                <Show when={note().summary}>
+                  <span style={{ fg: theme.textMuted }}> — {note().summary}</span>
+                </Show>
+              </text>
+            </box>
+          )
+        }}
+      </Show>
+      <Show when={text() && !actorNotification()}>
         <box
           id={props.message.id}
           border={["left"]}

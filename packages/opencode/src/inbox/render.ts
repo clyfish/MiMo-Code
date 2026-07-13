@@ -38,3 +38,36 @@ export function renderActorNotification(event: {
   }
   return `<actor-notification>\n${header} was cancelled.\n</actor-notification>`
 }
+
+export type ParsedActorNotification = {
+  // "stalled" is reserved for a future watchdog-emitted notification;
+  // renderActorNotification never produces it today (only completed/failed/
+  // cancelled). The parse + card styling exist ahead of that producer.
+  status: "completed" | "failed" | "cancelled" | "stalled"
+  description: string
+  summary?: string
+}
+
+// Inverse of renderActorNotification: recover the structured fields from the
+// pre-rendered <actor-notification> text so the TUI can show a card instead of
+// the raw wrapper. Pure + exported so it's unit-testable without the renderer.
+// Returns null for any text that isn't an actor notification.
+export function parseActorNotification(text: string): ParsedActorNotification | null {
+  if (!text.trimStart().startsWith("<actor-notification>")) return null
+  const header = text.match(/Background actor "(.*?)" \(actor_id: [^)]*\)\s+(completed|failed|was cancelled|stalled)\b/)
+  if (!header) return null
+  const description = header[1]
+  const verb = header[2]
+  const status: ParsedActorNotification["status"] =
+    verb === "completed" ? "completed" : verb === "failed" ? "failed" : verb === "stalled" ? "stalled" : "cancelled"
+  // Prefer the most human-relevant one-liner: Summary > Result > Error.
+  // renderActorNotification always emits the Summary line before the Result
+  // line, so restrict the Summary match to the region before the first
+  // "Result:" line — otherwise a `Summary:`-prefixed line inside the Result
+  // body would be mistaken for the notification's own summary.
+  const resultIdx = text.search(/^Result:/m)
+  const beforeResult = resultIdx === -1 ? text : text.slice(0, resultIdx)
+  const line = (label: string, scope: string) => scope.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim()
+  const summary = line("Summary", beforeResult) ?? line("Result", text) ?? line("Error", text)
+  return summary ? { status, description, summary } : { status, description }
+}

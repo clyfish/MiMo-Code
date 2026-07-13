@@ -50,6 +50,8 @@ export const dict = {
   "tui.tips.shell_prefix":
     "メッセージを {highlight}!{/highlight} で始めるとシェルコマンドを直接実行できます（例：{highlight}!ls -la{/highlight}）",
   "tui.tips.tab_agent":
+    "{highlight}Tab{/highlight} または {highlight}Shift+Tab{/highlight} で Build / Plan / Compose エージェントを切り替えます",
+  "tui.tips.tab_agent_orchestrator":
     "{highlight}Tab{/highlight} または {highlight}Shift+Tab{/highlight} で Build / Plan / Compose / Orchestrator エージェントを切り替えます",
   "tui.tips.theme_mode":
     "{highlight}/dark{/highlight} でダークモード、{highlight}/light{/highlight} でライトモードに切り替えます",

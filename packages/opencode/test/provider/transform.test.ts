@@ -1875,10 +1875,10 @@ describe("ProviderTransform.ensureTrailingUserMessage - safe proactive guard (ne
     npm: "@ai-sdk/amazon-bedrock",
   })
   // Gateway exposing an Anthropic-backed model via a dotted id — the live-400 path
-  // (mimorouter -> Bedrock). The guard is provider-agnostic so it applies here too.
+  // (gateway -> Bedrock). The guard is provider-agnostic so it applies here too.
   const gatewayModel = withProvider("mimo", {
     id: "anthropic.claude-sonnet-4",
-    url: "http://mimorouter.llmcore.ai.srv/v1/messages",
+    url: "http://gateway.example/v1/messages",
     npm: "@ai-sdk/anthropic",
   })
 
@@ -1968,7 +1968,7 @@ describe("ProviderTransform.ensureTrailingUserMessage - safe proactive guard (ne
     for (const [label, model] of [
       ["anthropic-native", anthropicModel],
       ["bedrock", bedrockModel],
-      ["anthropic gateway (mimorouter)", gatewayModel],
+      ["anthropic gateway", gatewayModel],
     ] as const) {
       test(`${label}: a completed trailing reply is kept and the request ends with a user message`, () => {
         const msgs = [
@@ -2720,10 +2720,10 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
   test("openai-compatible with claude in model id does NOT trigger caching", () => {
     const model = createModel({
-      id: "mimorouter/claude-opus-4-8",
+      id: "gateway/claude-opus-4-8",
       providerID: "custom",
       api: {
-        id: "mimorouter/claude-opus-4-8",
+        id: "gateway/claude-opus-4-8",
         url: "https://proxy.example.com/v1",
         npm: "@ai-sdk/openai-compatible",
       },

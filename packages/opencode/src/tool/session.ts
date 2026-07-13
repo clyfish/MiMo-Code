@@ -818,12 +818,6 @@ export const SessionTool = Tool.define<typeof parameters, Metadata, Deps>(
         // to ctx.sessionID at create time. Enrich each child with its actor
         // row (mode/agent/status) keyed by sessionID === actorID === child.id.
         const children = yield* sessions.children(ctx.sessionID as SessionID)
-        // Subagent sessions (checkpoint-writer / dream / distill / read-only
-        // fork-query children spawned by `ask`) are ALSO parented to us via the
-        // Session row, so sessions.children returns them too. They are not real
-        // peer children the orchestrator manages — filter them out. A child is a
-        // subagent iff its actor row is mode:"subagent" or its agent is one of
-        // the runtime system-spawned types (checkpoint-writer/dream/distill).
         const enriched = yield* Effect.forEach(children, (child) =>
           actorReg.get(child.id, child.id).pipe(Effect.map((actor) => ({ child, actor }))),
         )

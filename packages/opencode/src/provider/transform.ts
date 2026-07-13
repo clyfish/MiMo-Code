@@ -241,6 +241,115 @@ function supportsCacheMarkers(model: Provider.Model): boolean {
   return false
 }
 
+
+// A trailing assistant "prefill" — a conversation ending with an assistant
+// message the model would continue from — is a pattern some backends (notably
+// the Bedrock Converse API) hard-400 on: "This model does not support assistant
+// message prefill. The conversation must end with a user message." Our harness
+// never *intends* to steer output with a prefill; a trailing assistant on the
+// wire is always residue: an interrupted generation, an invalid-output/text-tool
+// recovery turn, or a completed reply that a re-entry path (a ReAct step or a
+// resumed/continued turn — see session/prompt.ts request assembly) sent without
+// appending a following user turn.
+//
+// The original fix here dropped the trailing assistant run UNCONDITIONALLY. That
+// is unsafe: when the trailing assistant is a COMPLETED, content-bearing reply
+// (which is exactly the organic case that produced the live Bedrock 400), a bare
+// drop DELETES that reply's content from the request. Losing a real answer from
+// the transcript is worse than the 400 it avoids.
+//
+// The safe fix keeps every message and instead APPENDS a minimal continuation
+// user turn so the conversation ends with a user message without discarding any
+// content. At this choke point we only have `ModelMessage` (role + content); the
+// `finish`/`error` completeness metadata lives upstream on `MessageV2.Assistant`
+// and isn't visible here, so we can't tell "incomplete residue" from "completed
+// reply" — appending is the content-preserving choice for both. A truly empty
+// trailing assistant (no text and no tool-call — pure residue with nothing to
+// preserve) is dropped instead, since there is no content to keep.
+//
+// A trailing *tool* message is left untouched: providers accept a conversation
+// ending in a tool result (it is the observation half of a tool call), and it is
+// not an assistant prefill.
+const CONTINUATION_PROMPT = "Continue."
+
+// True when an assistant ModelMessage carries no renderable content (no text and
+// no tool-call) — pure residue we can drop without losing anything.
+function isEmptyAssistant(msg: ModelMessage): boolean {
+  if (msg.role !== "assistant") return false
+  if (typeof msg.content === "string") return msg.content.trim() === ""
+  if (!Array.isArray(msg.content)) return true
+  // Only text and tool-call count as preservable content. A reasoning-only or
+  // step-start-only trailing assistant is residue (the model never emitted a
+  // final answer or a tool call) — matching MessageV2.toModelMessages, which
+  // skips an aborted assistant that carries only step-start/reasoning parts.
+  return !msg.content.some(
+    (part) => (part.type === "text" && part.text.trim() !== "") || part.type === "tool-call",
+  )
+}
+
+// Pre-send guard: guarantee the conversation never ends with an assistant
+// (prefill) message that a provider like Bedrock rejects, WITHOUT deleting a
+// completed reply's content. Empty trailing assistants (residue) are dropped;
+// any content-bearing trailing assistant is preserved and a minimal continuation
+// user turn is appended so the list ends with a user message. Runs at the
+// pre-send choke point in `message()`, so it also self-heals history that
+// already ends in an assistant turn.
+export function ensureTrailingUserMessage(msgs: ModelMessage[]): ModelMessage[] {
+  // Drop only trailing EMPTY assistant residue (nothing to preserve).
+  let end = msgs.length
+  while (end > 0 && isEmptyAssistant(msgs[end - 1])) end--
+  const trimmed = end === msgs.length ? msgs : msgs.slice(0, end)
+  const last = trimmed[trimmed.length - 1]
+  // Already ends with user or tool (or empty) — safe to send as-is.
+  if (!last || last.role !== "assistant") return trimmed
+  // A content-bearing assistant is legitimately last: keep it and append a
+  // minimal user turn so the request ends with a user message.
+  return [...trimmed, { role: "user", content: CONTINUATION_PROMPT }]
+}
+
+// Hard prune of the trailing assistant run, discarding its content. Unlike
+// `ensureTrailingUserMessage` this DOES delete content, so it is used only by the
+// reactive backstop in session/llm.ts — after a provider has already returned the
+// deterministic prefill-rejection 400 for a request the proactive guard did not
+// (or could not) neutralize. In that last-resort case dropping is preferable to
+// re-failing, and it is exported for that single consumer.
+export function dropTrailingAssistantPrefill(msgs: ModelMessage[]): ModelMessage[] {
+  let end = msgs.length
+  while (end > 0 && msgs[end - 1].role === "assistant") end--
+  if (end === msgs.length) return msgs
+  return msgs.slice(0, end)
+}
+
+// Signature of the non-retryable 400 a Bedrock Converse backend returns when the
+// conversation ends with an assistant (prefill) message. The primary defense is
+// the proactive `ensureTrailingUserMessage` guard in `message()`, so we should
+// never send a trailing assistant prefill in the first place. This regex backs
+// the reactive backstop in session/llm.ts: if any path still slips a trailing
+// assistant through to the wire (e.g. a provider-side transform re-adds one) and
+// the backend rejects it, we detect the rejection and reprune. The error body
+// reads:
+//   "This model does not support assistant message prefill. The conversation
+//    must end with a user message." (Service: BedrockRuntime)
+// Matching the deterministic failure text is provider-agnostic: it works
+// regardless of gateway naming, providerID, or model-id namespace. We inspect
+// both the error message and the raw response body, case-insensitively, and key
+// only on the specific prefill-rejection phrase — not all 400s.
+const ASSISTANT_PREFILL_REJECTION = /does not support assistant message prefill|must end with a user message/i
+
+export function isAssistantPrefillRejection(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const e = error as { message?: unknown; responseBody?: unknown; statusCode?: unknown }
+  const status = typeof e.statusCode === "string" ? Number.parseInt(e.statusCode, 10) : e.statusCode
+  // The prefill rejection is always a 400; require it so an unrelated error that
+  // happens to echo the phrase (e.g. our own log line) can't trigger a reprune.
+  if (typeof status === "number" && !Number.isNaN(status) && status !== 400) return false
+  const haystack = [
+    typeof e.message === "string" ? e.message : "",
+    typeof e.responseBody === "string" ? e.responseBody : "",
+  ].join("\n")
+  return ASSISTANT_PREFILL_REJECTION.test(haystack)
+}
+
 // The cache-control marker shape differs per provider/SDK. This is the single
 // source of truth, keyed by the SDK provider-options namespace. `applyCaching`
 // attaches the whole object (keyed by stored providerID) and lets `message()`
@@ -590,6 +699,10 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   msgs = unsupportedParts(msgs, model)
   msgs = limitImages(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  // SAFE prefill guard: never let the request end with an assistant (prefill)
+  // message a provider (e.g. Bedrock) would reject, without deleting a completed
+  // reply. Drops only empty residue; appends a continuation user turn otherwise.
+  msgs = ensureTrailingUserMessage(msgs)
   if (supportsCacheMarkers(model)) {
     msgs = applyCaching(msgs, model)
   }

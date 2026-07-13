@@ -975,6 +975,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(
@@ -1016,7 +1017,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {},
     )
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toEqual([
       {
         type: "tool-call",
@@ -1037,6 +1038,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           { type: "text", text: "Answer" },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(
@@ -1514,11 +1516,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "text", text: "" },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
   })
@@ -1533,11 +1536,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "reasoning", text: "" },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
   })
@@ -1571,11 +1575,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
@@ -1595,11 +1600,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "text", text: "Result" },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(2)
     expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
@@ -1658,11 +1664,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         role: "assistant",
         content: [{ type: "text", text: "" }],
       },
+      { role: "user", content: "next" },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
+    expect(result).toHaveLength(3)
     expect(result[0].content).toBe("")
     expect(result[1].content).toHaveLength(1)
   })
@@ -1721,11 +1728,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toMatchObject([
       { type: "text", text: "I checked your home directory and looked for PDF files." },
       { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
@@ -1753,11 +1761,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "text", text: "I checked your home directory and looked for PDF files." },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, model, {}) as any[]
 
-    expect(result).toHaveLength(2)
+    expect(result).toHaveLength(3)
     expect(result[0]).toMatchObject({
       role: "assistant",
       content: [{ type: "text", text: "I checked your home directory and looked for PDF files." }],
@@ -1771,6 +1780,242 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     })
   })
 })
+
+describe("ProviderTransform.isAssistantPrefillRejection - error-body detection (defensive backstop)", () => {
+  // Backstop for any path that might still slip a trailing assistant prefill to
+  // the wire despite the unconditional proactive drop. The only reliable signal
+  // for the rejection is the deterministic 400 body, so detection keys off that.
+  const bedrockPrefillBody = JSON.stringify({
+    message: "This model does not support assistant message prefill. The conversation must end with a user message.",
+    Service: "BedrockRuntime",
+  })
+
+  test("detects the AI SDK APICallError shape (statusCode 400 + responseBody)", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: bedrockPrefillBody,
+      message: "Bad Request",
+      isRetryable: false,
+    }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(true)
+  })
+
+  test("detects the phrase in the error message even when responseBody is absent", () => {
+    const error = {
+      statusCode: 400,
+      message: "This model does not support assistant message prefill.",
+    }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(true)
+  })
+
+  test("detects the 'must end with a user message' variant (case-insensitive)", () => {
+    const error = { statusCode: 400, responseBody: "The conversation MUST END WITH A USER MESSAGE." }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(true)
+  })
+
+  test("matches when statusCode is a numeric string (some gateways stringify it)", () => {
+    const error = { statusCode: "400", responseBody: bedrockPrefillBody }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(true)
+  })
+
+  test("does NOT match an unrelated 400 (no prefill phrase)", () => {
+    const error = { statusCode: 400, responseBody: JSON.stringify({ message: "invalid_request: bad tool schema" }) }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(false)
+  })
+
+  test("does NOT match a non-400 status even if the phrase appears (must be the 400 rejection)", () => {
+    const error = { statusCode: 500, responseBody: "does not support assistant message prefill" }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(false)
+  })
+
+  test("does NOT match null / undefined / non-object", () => {
+    expect(ProviderTransform.isAssistantPrefillRejection(undefined)).toBe(false)
+    expect(ProviderTransform.isAssistantPrefillRejection(null)).toBe(false)
+    expect(ProviderTransform.isAssistantPrefillRejection("does not support assistant message prefill")).toBe(false)
+  })
+
+  test("matches when statusCode is absent but the phrase is present (stream-body error without a parsed status)", () => {
+    const error = { message: "400 does not support assistant message prefill (Service: BedrockRuntime)" }
+    expect(ProviderTransform.isAssistantPrefillRejection(error)).toBe(true)
+  })
+})
+
+describe("ProviderTransform.ensureTrailingUserMessage - safe proactive guard (never deletes a completed reply)", () => {
+  const withProvider = (providerID: string, api: { id: string; url: string; npm: string }) =>
+    ({
+      id: `${providerID}/${api.id}`,
+      providerID,
+      api,
+      name: api.id,
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  const anthropicModel = withProvider("anthropic", {
+    id: "claude-3-5-sonnet-20241022",
+    url: "https://api.anthropic.com",
+    npm: "@ai-sdk/anthropic",
+  })
+  const bedrockModel = withProvider("amazon-bedrock", {
+    id: "anthropic.claude-opus-4-6",
+    url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+    npm: "@ai-sdk/amazon-bedrock",
+  })
+  // Gateway exposing an Anthropic-backed model via a dotted id — the live-400 path
+  // (mimorouter -> Bedrock). The guard is provider-agnostic so it applies here too.
+  const gatewayModel = withProvider("mimo", {
+    id: "anthropic.claude-sonnet-4",
+    url: "http://mimorouter.llmcore.ai.srv/v1/messages",
+    npm: "@ai-sdk/anthropic",
+  })
+
+  test("preserves a COMPLETED trailing assistant reply and appends a continuation user turn (no content deleted)", () => {
+    const msgs = [
+      { role: "user", content: "q" },
+      { role: "assistant", content: [{ type: "text", text: "the full completed answer" }] },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    expect(result).toHaveLength(3)
+    // Reply preserved verbatim...
+    expect(result[1].role).toBe("assistant")
+    expect((result[1].content as any)[0].text).toBe("the full completed answer")
+    // ...and the conversation now ends with a user message.
+    expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("preserves a trailing assistant that carries a tool-call (real content) via a continuation user turn", () => {
+    const msgs = [
+      { role: "user", content: "read" },
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "c1", toolName: "read", input: {} }] },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    expect(result.some((m) => Array.isArray(m.content) && (m.content[0] as any)?.type === "tool-call")).toBe(true)
+    expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("drops an INCOMPLETE (empty) trailing assistant (residue) without appending anything", () => {
+    const msgs = [
+      { role: "user", content: "q" },
+      { role: "assistant", content: [] },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+  })
+
+  test("drops a reasoning-only trailing assistant (residue: no final text/tool-call, matches toModelMessages)", () => {
+    const msgs = [
+      { role: "user", content: "q" },
+      { role: "assistant", content: [{ type: "reasoning", text: "some reasoning" }] },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    // A reasoning-only trailing assistant carries no final answer or tool call, so
+    // it is residue (upstream toModelMessages skips such aborted turns). Dropped;
+    // the conversation then ends on the user turn with nothing appended.
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+  })
+
+  test("peels trailing empty residue but preserves an earlier content-bearing reply with a continuation turn", () => {
+    const msgs = [
+      { role: "user", content: "go" },
+      { role: "assistant", content: [{ type: "text", text: "real reply" }] },
+      { role: "assistant", content: [] },
+      { role: "assistant", content: "   " },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    expect(result.some((m) => Array.isArray(m.content) && (m.content[0] as any)?.text === "real reply")).toBe(true)
+    expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("leaves a conversation already ending with a user message untouched (identity)", () => {
+    const msgs = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: [{ type: "text", text: "hello" }] },
+      { role: "user", content: "bye" },
+    ] as any[]
+    expect(ProviderTransform.ensureTrailingUserMessage(msgs)).toBe(msgs)
+  })
+
+  test("leaves a trailing tool message untouched (tool result is a valid conversation end, not a prefill)", () => {
+    const msgs = [
+      { role: "user", content: "read" },
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "c1", toolName: "read", input: {} }] },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "c1", toolName: "read", output: { type: "text", value: "ok" } }],
+      },
+    ] as any[]
+    const result = ProviderTransform.ensureTrailingUserMessage(msgs)
+    expect(result).toHaveLength(3)
+    expect(result[result.length - 1].role).toBe("tool")
+  })
+
+  describe("end-to-end via message() — every provider ends the request with a user message", () => {
+    for (const [label, model] of [
+      ["anthropic-native", anthropicModel],
+      ["bedrock", bedrockModel],
+      ["anthropic gateway (mimorouter)", gatewayModel],
+    ] as const) {
+      test(`${label}: a completed trailing reply is kept and the request ends with a user message`, () => {
+        const msgs = [
+          { role: "user", content: "Question?" },
+          { role: "assistant", content: [{ type: "text", text: "Completed answer." }] },
+        ] as any[]
+        const result = ProviderTransform.message(msgs, model, {})
+        expect(result[result.length - 1].role).toBe("user")
+        expect(
+          result.some((m: any) => Array.isArray(m.content) && m.content.some((p: any) => p.text === "Completed answer.")),
+        ).toBe(true)
+      })
+    }
+  })
+})
+
+describe("ProviderTransform.dropTrailingAssistantPrefill - hard prune (reactive backstop last resort)", () => {
+  test("drops the entire trailing assistant run, discarding content", () => {
+    const msgs = [
+      { role: "user", content: "go" },
+      { role: "assistant", content: [{ type: "text", text: "first" }] },
+      { role: "assistant", content: [{ type: "text", text: "second" }] },
+    ] as any[]
+    const result = ProviderTransform.dropTrailingAssistantPrefill(msgs)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+  })
+
+  test("only drops the trailing run, preserving mid-conversation assistants", () => {
+    const msgs = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: [{ type: "text", text: "mid" }] },
+      { role: "user", content: "go" },
+      { role: "assistant", content: [{ type: "text", text: "tail" }] },
+    ] as any[]
+    const result = ProviderTransform.dropTrailingAssistantPrefill(msgs)
+    expect(result[result.length - 1].role).toBe("user")
+    expect(result[result.length - 1].content).toBe("go")
+    expect(result.some((m) => Array.isArray(m.content) && (m.content[0] as any)?.text === "mid")).toBe(true)
+  })
+
+  test("leaves a user/tool-terminated list unchanged (identity)", () => {
+    const msgs = [{ role: "user", content: "hi" }] as any[]
+    expect(ProviderTransform.dropTrailingAssistantPrefill(msgs)).toBe(msgs)
+  })
+})
+
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
   const openaiModel = {
@@ -1824,11 +2069,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
@@ -1865,11 +2111,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, zenModel, { store: false }) as any[]
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
     expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
@@ -1892,6 +2139,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
@@ -1923,6 +2171,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, azureModel, { store: false }) as any[]
@@ -1947,6 +2196,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     // store=true keeps itemId (stateful Responses API resolves items by id)
@@ -1980,6 +2230,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     // store=false does NOT strip for non-openai/azure packages
@@ -2014,6 +2265,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
@@ -2048,6 +2300,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
           },
         ],
       },
+      { role: "user", content: [{ type: "text", text: "next" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
@@ -2526,7 +2779,9 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
   test("content-level provider marks the last two messages regardless of role", () => {
     // Providers that reach applyCaching honor message-level markers (incl.
-    // assistant), so the double-tail marks the last two messages by position.
+    // assistant). The unconditional prefill drop removes any TRAILING assistant
+    // before caching, so a mid-conversation assistant (index 3) is the "regardless
+    // of role" case: it still gets marked when it lands in the double-tail window.
     const model = createModel({
       providerID: "openrouter",
       api: { id: "anthropic/claude-sonnet-4", url: "https://openrouter.ai/api", npm: "@openrouter/ai-sdk-provider" },
@@ -2535,8 +2790,8 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       { role: "system", content: [{ type: "text", text: "sys" }] },
       { role: "user", content: [{ type: "text", text: "first question" }] },
       { role: "assistant", content: [{ type: "text", text: "first answer" }] },
-      { role: "user", content: [{ type: "text", text: "second question" }] },
       { role: "assistant", content: [{ type: "text", text: "second answer" }] },
+      { role: "user", content: [{ type: "text", text: "second question" }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, model, {}) as any[]
@@ -2545,7 +2800,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       !!msg.providerOptions?.openrouter ||
       msg.content?.some?.((c: any) => c.providerOptions?.openrouter)
 
-    // The last two messages (index 3 user, 4 assistant) are both marked.
+    // The last two messages (index 3 assistant, 4 user) are both marked.
     expect(hasMarker(result[3])).toBe(true)
     expect(hasMarker(result[4])).toBe(true)
     // Earlier turns are not.

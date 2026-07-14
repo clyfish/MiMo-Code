@@ -36,14 +36,14 @@ const SHORT_SHA = await (async () => {
     const sha = await $`git rev-parse --short HEAD`.text()
     return sha.trim()
   } catch {
-    return process.env["MIMOCODE_COMMIT_SHA"] ?? "unknown"
+    return process.env["MIMOCODE_COMMIT_SHA"] ?? null
   }
 })()
 
 const VERSION = await (async () => {
   if (env.MIMOCODE_VERSION) return env.MIMOCODE_VERSION
   if (IS_PREVIEW) {
-    return `0.0.0-${CHANNEL}-${SHORT_SHA}`
+    return SHORT_SHA ? `0.0.0-${CHANNEL}-${SHORT_SHA}` : `0.0.0-${CHANNEL}`
   }
   const version = await Bun.file(path.resolve(import.meta.dir, "../../opencode/package.json"))
     .json()

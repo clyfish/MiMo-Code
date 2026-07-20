@@ -134,9 +134,11 @@ def set_cjk_font(run, font_name):
 set_cjk_font(p.runs[0], "Noto Sans CJK SC")        # a CJK-capable font present on the render machine
 ```
 
-Choose a font that actually ships CJK glyphs (a Noto Sans CJK / Source Han
-variant, or the platform's system CJK font). A Latin-only face such as Calibri
-will not carry CJK no matter which slot you set.
+Choose a font that actually ships CJK glyphs and exists on the machine where
+the deck will be viewed — prefer the standard CJK face of the current OS
+(check the platform from your environment): `Microsoft YaHei` on Windows,
+`PingFang SC` on macOS, `Noto Sans CJK SC` on Linux. A Latin-only face such as
+Calibri will not carry CJK no matter which slot you set.
 
 ### Bulleted list
 

@@ -251,7 +251,7 @@ def ref(paragraph, name):
 | Image renders huge | Only `width` or `height` supplied ≥ page width | Compute `Cm(15)` (roughly page-content width) and let the other axis auto-scale. |
 | File opens with "content had problems" | Manually inserted XML with unbalanced tags | Reopen the exploded directory, run `xmllint --noout word/document.xml`, fix the offending element. |
 | "Missing font" warning on open (Cambria, Calibri, CJK fonts) | `python-docx` default template embeds font references in theme XML that may not be installed | Patch the theme after `Document()` — see recipe below. |
-| Chinese / non-ASCII text renders as `??` in some viewers | Font run has no East-Asian font | Set both the ASCII and East-Asian typefaces: `run.font.name = "Calibri"; run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "Microsoft YaHei")` — the `get_or_add_*` form is safe when the run has no `rPr`/`rFonts` yet; setting only `run.font.name` leaves CJK on the default font. Use a CJK-capable font for the `w:eastAsia` value. |
+| Chinese / non-ASCII text renders as `??` in some viewers | Font run has no East-Asian font | Set both the ASCII and East-Asian typefaces: `run.font.name = "Calibri"; run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "Microsoft YaHei")` — the `get_or_add_*` form is safe when the run has no `rPr`/`rFonts` yet; setting only `run.font.name` leaves CJK on the default font. Use a CJK-capable font for the `w:eastAsia` value (per-OS table in the theme-patch section below). |
 
 ## Recipes
 
@@ -329,7 +329,7 @@ for latin in theme_xml.xpath("//a:majorFont/a:latin | //a:minorFont/a:latin", na
     latin.set("typeface", "Times New Roman")       # or your preferred Latin font
 for font in theme_xml.xpath("//a:majorFont/a:font | //a:minorFont/a:font", namespaces=ns):
     if font.get("script", "") in ("Hans", "Hant", "Jpan", "Hang"):
-        font.set("typeface", "SimSun")             # or your preferred CJK font
+        font.set("typeface", "Microsoft YaHei")    # current OS's CJK face — see table below
 
 theme_part._blob = etree.tostring(theme_xml, xml_declaration=True, encoding="UTF-8", standalone=True)
 
@@ -339,7 +339,15 @@ for style in doc.styles:
         style.font.name = "Courier New"
 ```
 
-Call this once, immediately after `Document()`, before adding content. Choose fonts you know exist on your target audience's systems. For CJK documents the most portable choices are SimSun / 宋体 (Chinese), MS Mincho (Japanese), or Malgun Gothic (Korean).
+Call this once, immediately after `Document()`, before adding content. Choose fonts that exist on the machine where the file will be viewed — don't invent names. For Chinese text, prefer the standard CJK face of the current OS (check the platform from your environment):
+
+| OS | CJK font (for `w:eastAsia` and theme script slots) |
+|----|-----------------------------------------------------|
+| Windows | `Microsoft YaHei` (微软雅黑) |
+| macOS | `PingFang SC` (苹方) |
+| Linux | `Noto Sans CJK SC` |
+
+For Japanese/Korean, use the platform's JP/KR system face instead (e.g. Yu Gothic / Malgun Gothic on Windows, Hiragino Sans / Apple SD Gothic Neo on macOS).
 
 ## Testing your generator
 

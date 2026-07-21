@@ -157,10 +157,13 @@ Colors are 8-character ARGB strings (`"FFF2F2F2"`) or 6-character RGB
 For cells containing CJK (Chinese/Japanese/Korean) text, set a CJK-capable
 font name — openpyxl's `Font(name=...)` is the single face for the whole cell,
 and a Latin-only face such as Calibri leaves CJK rendering to inconsistent
-viewer substitution. Prefer the standard CJK face of the OS the file will be
-viewed on (check the platform from your environment): `Microsoft YaHei` on
-Windows, `PingFang SC` on macOS, `Noto Sans CJK SC` on Linux — e.g.
-`Font(name="Microsoft YaHei", size=11)`.
+viewer substitution. In the common interactive case the workbook is viewed on
+the machine that generated it — use the current OS's standard CJK face (check
+the platform from your environment): `Microsoft YaHei` on Windows,
+`PingFang SC` on macOS, `Noto Sans CJK SC` on Linux — e.g.
+`Font(name="Microsoft YaHei", size=11)`. If it targets viewers on a different
+or unknown OS, prefer the portable `Microsoft YaHei` (every Windows ships it;
+other platforms substitute a reasonable CJK face).
 
 ### Named styles (reusable)
 

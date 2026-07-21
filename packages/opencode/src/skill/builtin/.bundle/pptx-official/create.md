@@ -135,10 +135,14 @@ set_cjk_font(p.runs[0], "Noto Sans CJK SC")        # a CJK-capable font present 
 ```
 
 Choose a font that actually ships CJK glyphs and exists on the machine where
-the deck will be viewed — prefer the standard CJK face of the current OS
-(check the platform from your environment): `Microsoft YaHei` on Windows,
-`PingFang SC` on macOS, `Noto Sans CJK SC` on Linux. A Latin-only face such as
-Calibri will not carry CJK no matter which slot you set.
+the deck will be viewed. In the common interactive case that's the machine
+generating it — use the current OS's standard CJK face (check the platform
+from your environment): `Microsoft YaHei` on Windows, `PingFang SC` on macOS,
+`Noto Sans CJK SC` on Linux. If the deck targets viewers on a different or
+unknown OS, prefer a portable name (`Microsoft YaHei` — every Windows ships
+it; other platforms substitute). A wrong-but-CJK name only causes font
+substitution; a Latin-only face such as Calibri causes tofu no matter which
+slot you set.
 
 ### Bulleted list
 

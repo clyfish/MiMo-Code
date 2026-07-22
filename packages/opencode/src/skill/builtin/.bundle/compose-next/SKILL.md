@@ -5,7 +5,7 @@ description: Use for multi-step feature work, bug fixes, or refactors where requ
 
 # Compose Next
 
-Compact end-to-end contract for grill → spec → implement → verify → review → finalize → finish. One skill load, no internal skill hand-offs. Executable protocol only; rationale is not restated at execution time.
+Compact end-to-end contract for grill → spec → workspace → implement → verify → review → finalize → finish. One skill load, no internal skill hand-offs. Executable protocol only; rationale is not restated at execution time.
 
 ## Step 0 — Orient
 
@@ -13,9 +13,11 @@ Inspect the repository, its instructions (`AGENTS.md`, `README`, existing spec f
 
 Decide the shape of the work:
 
-- **Fully constrained mechanical change with no durable design surface** → skip Grill and Spec, go to Implement.
+- **Fully constrained mechanical change with no durable design surface** → skip Grill and Spec, go to Workspace then Implement.
 - **Requirements or design ambiguous** → Grill first.
 - **Requirements clear, feature deserves a durable document** → Spec first.
+
+Every path passes through Workspace before Implement; no branch skips it.
 
 ## Grill — resolve decisions
 
@@ -45,7 +47,7 @@ Never-Ask applies to the current decision only. At every later decision point, c
 
 ## Spec — one document per feature
 
-Maintain one document per feature at `spec/<feature-name>.md` under the `<compose_docs_dir>` supplied by the prompt. Do not add a date to the filename. A user-specified location overrides this path. Edit an existing document in place; never create a separate plan or report.
+Maintain one document per feature at `docs/compose/spec/<feature-name>.md` from the repository root. Do not add a date to the filename. A user-specified location overrides this path. Edit an existing document in place; never create a separate plan or report.
 
 ### Template
 
@@ -102,7 +104,7 @@ Never begin implementation on `main` or `master` without explicit user consent.
 
 ## Implement
 
-Use the feature document as the source of requirements, or the conversation for an undocumented mechanical change. Execute tasks in dependency order. Track multi-step work with the `task` tool.
+Use the feature document as the source of requirements, or the conversation for an undocumented mechanical change. When a feature document exists, set its `status: in-progress` on the first implementation commit. Execute tasks in dependency order. Track multi-step work with the `task` tool.
 
 For behavior changes with a cheap reproduction, write a failing test, confirm it fails for the intended reason, implement the smallest fix, and confirm it passes. A bug fix requires a regression test when one can be written. Skip test-first for generated code, configuration-only changes, throwaway prototypes, or explicit user direction.
 
@@ -172,7 +174,11 @@ Update a design section only when it contradicts the delivered behavior. Commit 
 
 Do not auto-finish. After Finalize, report branch, base, head SHA, worktree, feature-doc path, and suggest a closing action.
 
-If the user asks to finish but the path is unclear, use the `question` tool (e.g. local merge / PR / push only / keep; which base; keep or remove the worktree).
+If the user asks to finish but the path is unclear, use the `question` tool to settle:
+
+- closing action: local merge / open PR / push only / keep the branch;
+- which base branch to merge or target;
+- keep or remove the worktree.
 
 Worktree pitfalls:
 

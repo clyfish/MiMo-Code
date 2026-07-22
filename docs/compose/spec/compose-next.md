@@ -1,6 +1,6 @@
 ---
 feature: compose-next
-status: draft
+status: in-progress
 updated: 2026-07-22
 branch: compose-next
 predecessor: compose-slim (draft PR #1850)
@@ -39,12 +39,13 @@ Canonical name: `compose-next`. Bundle root: builtin. Not prefixed with `compose
 The skill body is a single executable contract, in this order:
 
 1. **Grill** - resolve genuine user decisions (question tool with concrete options); apply Never-Ask to a single decision only; do not batch later decisions under one grant.
-2. **Spec** - create or amend a feature document at `<compose_docs_dir>/spec/<feature>.md` when the work warrants one; keep design, tasks, and delivery report in that one document.
-3. **Implement** - proceed in dependency order; use test-first where applicable; own a worktree explicitly if isolation is needed; do not spawn parallel edits into the same worktree.
-4. **Verify** - run verification and produce a compact PASS/FAIL/PRE-EXISTING summary; verification must complete before review is dispatched.
-5. **Review** - dispatch one fresh reviewer with spec path, worktree path, base/head SHAs, diff coordinates, and the compact verification summary; the reviewer reuses that summary rather than duplicating heavy E2E commands without cause.
-6. **Finalize** - update the feature document (report, journey log, verification evidence) before branch completion.
-7. **Finish** - explicit merge / PR / keep-branch / discard, with worktree ownership stated; destructive actions never auto-approve.
+2. **Spec** - create or amend a feature document at `docs/compose/spec/<feature>.md` when the work warrants one; keep design, tasks, and delivery report in that one document. The path is fixed in the skill text; no `<compose_docs_dir>` prompt injection is involved (that block only exists for the Compose agent and `compose.js`, neither of which is in the `/compose-next` path).
+3. **Workspace** - own a worktree before implementation on every path (linked worktree under `.worktrees/` by default); never start on `main`/`master` without explicit consent.
+4. **Implement** - proceed in dependency order; use test-first where applicable; do not spawn parallel edits into the same worktree.
+5. **Verify** - run verification and produce a compact PASS/FAIL/PRE-EXISTING summary; verification must complete before review is dispatched.
+6. **Review** - dispatch one fresh reviewer with spec path, worktree path, base/head SHAs, diff coordinates, and the compact verification summary; the reviewer reuses that summary rather than duplicating heavy E2E commands without cause.
+7. **Finalize** - update the feature document (report, journey log, verification evidence) before branch completion.
+8. **Finish** - explicit merge / PR / keep-branch / discard, with worktree ownership stated; destructive actions never auto-approve.
 
 The three slim experimental skills are source material for this document; they are not carried into the production bundle.
 
@@ -89,7 +90,7 @@ Keys added:
 - `tui.tips.compose_next` — home tip body recommending Build + `/compose-next`.
 - `tui.skill.compose-next.description` — description shown in skill dialog / autocomplete / command palette. Naming follows the existing `tui.skill.<name>.description` convention.
 
-The Compose agent description line appended in `agent.ts` is inline English today and stays inline English in this PR — the localized surface for users is the tip and the toast, both keyed above.
+The Compose agent description line appended in `agent.ts` is inline English today and stays inline English in this PR — the localized surface for users is the tip and the skill description, both keyed above.
 
 ### Why no scope mechanism in this PR
 
@@ -152,7 +153,7 @@ These are copied via `git checkout origin/compose-slim -- <path>` into a scratch
 
 From `packages/opencode`:
 
-- `bun test test/skill/compose-next-discovery.test.ts test/tool/skill-search-hidden.test.ts` (new).
+- `bun test test/permission/compose-next-discovery.test.ts test/skill/search.test.ts test/tool/skill-search.test.ts` (new/extended).
 - `bun test test/agent test/skill test/permission test/tool` (regression band relevant to the touched files).
 - `bun typecheck` (workspace-level from package dir).
 - `git diff --check`.

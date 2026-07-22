@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup } from "solid-js"
+import { createMemo, createSignal, For, onCleanup } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 import { useLanguage } from "@tui/context/language"
 import { useLocal } from "@tui/context/local"
@@ -179,19 +179,15 @@ export function Tips() {
   const lang = useLanguage()
   const local = useLocal()
   const allKeys = buildTipKeys(Flag.MIMOCODE_EXPERIMENTAL_ORCHESTRATOR, process.platform)
-  const isComposeAgent = () => local.agent.current()?.name === "compose"
-  const nextKey = () => (isComposeAgent() ? COMPOSE_LOCK_TIP : pickWeighted(allKeys))
-  const [key, setKey] = createSignal(nextKey())
-  const interval = setInterval(() => setKey(nextKey()), TIP_ROTATION_MS)
+  const [key, setKey] = createSignal(pickWeighted(allKeys))
+  const interval = setInterval(() => setKey(pickWeighted(allKeys)), TIP_ROTATION_MS)
   onCleanup(() => clearInterval(interval))
-  // Refresh the tip immediately whenever the current agent changes so entry
-  // into Compose shows the deprecation tip without waiting for the next
-  // rotation tick, and leaving Compose immediately drops it.
-  createEffect(() => {
-    isComposeAgent()
-    setKey(nextKey())
-  })
-  const parts = createMemo(() => parse(lang.t(key(), { count: themeCount })))
+  // Display override: while the current agent is Compose, show the compose-next
+  // deprecation tip in place of whatever the rotation currently holds. The
+  // rotation keeps running underneath; leaving Compose reveals the current
+  // rotation key with no artificial swap.
+  const displayKey = createMemo(() => (local.agent.current()?.name === "compose" ? COMPOSE_LOCK_TIP : key()))
+  const parts = createMemo(() => parse(lang.t(displayKey(), { count: themeCount })))
   const labelColor = createMemo(() => {
     const agent = local.agent.current()
     return agent ? local.agent.color(agent.name) : theme.warning

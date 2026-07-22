@@ -17,6 +17,70 @@ afterEach(async () => {
 })
 
 describe("ToolRegistry.tools: invocation style resolution", () => {
+  it.live("masks skill_search for GPT and Claude models", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const reg = yield* ToolRegistry.Service
+        const agents = yield* Agent.Service
+        const general = yield* agents.get("general")
+        if (!general) throw new Error("no general agent")
+        const ids = (modelID: string) =>
+          reg
+            .tools({
+              providerID: ProviderID.opencode,
+              modelID: ModelID.make(modelID),
+              agent: general,
+            })
+            .pipe(Effect.map((tools) => tools.map((tool) => tool.id)))
+
+        expect(yield* ids("openai/gpt-5.4")).not.toContain("skill_search")
+        expect(yield* ids("anthropic/claude-sonnet-4-6")).not.toContain("skill_search")
+        expect(yield* ids("mimo-v2")).toContain("skill_search")
+      }),
+    ),
+  )
+
+  it.live("uses the filesystem-capable bash description for GPT models", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const reg = yield* ToolRegistry.Service
+        const agents = yield* Agent.Service
+        const general = yield* agents.get("general")
+        if (!general) throw new Error("no general agent")
+        const tools = yield* reg.tools({
+          providerID: ProviderID.make("openai"),
+          modelID: ModelID.make("gpt-5"),
+          agent: general,
+        })
+        const bash = tools.find((tool) => tool.id === "bash")
+        expect(bash?.description).toContain("the dedicated `read`, `write`, and `edit` tools are unavailable")
+        expect(bash?.description).toContain("Use `apply_patch`")
+        expect(bash?.description).not.toContain("DO NOT use it for file operations")
+        expect(tools.some((tool) => tool.id === "notebook_edit")).toBeFalse()
+      }),
+    ),
+  )
+
+  it.live("keeps the specialized-tool bash description for non-GPT models", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const reg = yield* ToolRegistry.Service
+        const agents = yield* Agent.Service
+        const general = yield* agents.get("general")
+        if (!general) throw new Error("no general agent")
+        const tools = yield* reg.tools({
+          providerID: ProviderID.opencode,
+          modelID: ModelID.make("opencode/claude-sonnet-4-6"),
+          agent: general,
+        })
+        const bash = tools.find((tool) => tool.id === "bash")
+        expect(bash?.description).toContain("DO NOT use it for file operations")
+        expect(bash?.description).not.toContain("the dedicated `read`, `write`, and `edit` tools are unavailable")
+        expect(tools.some((tool) => tool.id === "notebook_edit")).toBeTrue()
+      }),
+    ),
+  )
+
   it.live("default config keeps task in JSON mode", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {

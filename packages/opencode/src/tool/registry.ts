@@ -1,7 +1,7 @@
 import { PlanEnterTool, PlanExitTool } from "./plan"
 import { Session } from "../session"
 import { QuestionTool } from "./question"
-import { BashTool } from "./bash"
+import { BashTool, bashDescription } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -56,6 +56,7 @@ import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
+import { isSkillSearchDisabled } from "../skill/search"
 import { Permission } from "@/permission"
 import { ActorRegistry } from "@/actor/registry"
 import { ActorWaiter } from "@/actor/waiter"
@@ -364,7 +365,10 @@ export const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const useGPTTools =
+        input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
       let filtered = (yield* all()).filter((tool) => {
+        if (tool.id === SkillSearchTool.id) return !isSkillSearchDisabled({ modelID: input.modelID })
         if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
           if (tool.id === WebSearchTool.id) {
             return (
@@ -376,10 +380,14 @@ export const layer = Layer.effect(
           return input.providerID === ProviderID.opencode || Flag.MIMOCODE_ENABLE_EXA
         }
 
-        const useGPTTools =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id || tool.id === ViewImageTool.id) return useGPTTools
-        if (tool.id === EditTool.id || tool.id === WriteTool.id || tool.id === ReadTool.id) return !useGPTTools
+        if (
+          tool.id === EditTool.id ||
+          tool.id === WriteTool.id ||
+          tool.id === ReadTool.id ||
+          tool.id === NotebookEditTool.id
+        )
+          return !useGPTTools
 
         return true
       })
@@ -403,7 +411,7 @@ export const layer = Layer.effect(
         Effect.fnUntraced(function* (tool: Tool.Def) {
           using _ = log.time(tool.id)
           const output = {
-            description: tool.description,
+            description: tool.id === BashTool.id && useGPTTools ? bashDescription(true) : tool.description,
             parameters: tool.parameters,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)

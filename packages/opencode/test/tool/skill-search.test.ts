@@ -1,19 +1,14 @@
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Effect, Layer } from "effect"
-import { afterEach, describe, expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import path from "path"
 import type { Permission } from "../../src/permission"
 import type { Tool } from "../../src/tool"
-import { Instance } from "../../src/project/instance"
 import { SkillSearchTool } from "../../src/tool/skill-search"
 import { ToolRegistry } from "../../src/tool"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-
-afterEach(async () => {
-  await Instance.disposeAll()
-})
 
 const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, CrossSpawnSpawner.defaultLayer))
 

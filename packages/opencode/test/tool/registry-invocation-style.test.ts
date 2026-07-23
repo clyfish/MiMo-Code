@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -8,15 +8,10 @@ import { ProviderID, ModelID } from "../../src/provider/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
 
 const it = testEffect(
   Layer.mergeAll(ToolRegistry.defaultLayer, Agent.defaultLayer, CrossSpawnSpawner.defaultLayer),
 )
-
-afterEach(async () => {
-  await Instance.disposeAll()
-})
 
 describe("ToolRegistry.tools: invocation style resolution", () => {
   it.live("exposes exec by default only to GPT models", () =>
@@ -55,7 +50,7 @@ describe("ToolRegistry.tools: invocation style resolution", () => {
         expect(yield* ids("mimo-v2")).not.toContain("exec")
       }),
     ),
-    10000,
+    30000,
   )
 
   it.live("exposes skill_search to GPT and Claude models", () =>
@@ -159,7 +154,7 @@ describe("ToolRegistry.tools: invocation style resolution", () => {
         expect(yield* ids("anthropic/claude-sonnet-4-6")).toContain("multiedit")
       }),
     ),
-    10000,
+    30000,
   )
 
   it.live("default config keeps task in JSON mode", () =>

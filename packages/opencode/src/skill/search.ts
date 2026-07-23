@@ -17,6 +17,10 @@ export type SkillSearchModel = {
   api?: { id?: string }
 }
 
+function isComposeSkill(skill: Pick<Skill.Info, "name">) {
+  return skill.name === "compose-next" || skill.name.startsWith("compose:")
+}
+
 export function isSkillSearchDisabled(model: SkillSearchModel) {
   return [model.id, model.modelID, model.api?.id, model.name, model.family]
     .filter((value) => value !== undefined)
@@ -76,7 +80,7 @@ function tokenize(value: string) {
 }
 
 export function searchSkills(query: string, skills: Skill.Info[]): SearchResult[] {
-  const searchable = skills.filter((skill) => !skill.name.startsWith("compose:"))
+  const searchable = skills.filter((skill) => !isComposeSkill(skill))
   const exact = searchable
     .filter((skill) =>
       [skill.name, ...(skill.aliases ?? []), ...localizedAliases(skill)].some((value) =>

@@ -34,7 +34,6 @@
     "marked": "^15"
   },
   "devDependencies": {
-    "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
     "@mimo-ai/app": "workspace:*",
     "@mimo-ai/ui": "workspace:*",
